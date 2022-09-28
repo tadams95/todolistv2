@@ -4,6 +4,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const app = express();
+const _ = require("lodash");
 
 app.set('view engine', 'ejs');
 
@@ -11,7 +12,7 @@ app.use(bodyParser.urlencoded({extended: true}));
 app.use(express.static("public"));
 
 //connect to mongo database
-mongoose.connect("mongodb://localhost:27017/todolistDB", {useNewUrlParser: true});
+mongoose.connect("mongodb+srv://tyrelle:Password22@cluster0.csas9qx.mongodb.net/?retryWrites=true&w=majority", {useNewUrlParser: true});
 
 const itemsSchema = {
   name: String
@@ -38,6 +39,17 @@ const item3 = new Item({
 //array of documents
 const defaultItems = [item1, item2, item3];
 
+//for every new list we create its going to have a name and an array of item documents
+const listSchema = {
+  name: String,
+  items: [itemsSchema]
+};
+
+const List = mongoose.model(
+"List",
+listSchema
+);
+
 app.get("/", function(req, res) {
 
   Item.find({}, function(err, foundItems) {
@@ -59,35 +71,66 @@ res.redirect("/");
   });
 });
 
+//customListName is the path the user types into URL
+app.get("/:customListName", function(req, res){
+  const customListName = _.capitalize(req.params.customListName);
+
+  List.findOne({name: customListName}, function(err, foundList){
+    if (!err){
+      if (!foundList){
+        //Create a new list
+        const list = new List({
+          name: customListName,
+          items: defaultItems
+        });
+        list.save();
+        res.redirect("/" + customListName);
+      } else {
+        //Show an existing list
+
+        res.render("list", {listTitle: foundList.name, newListItems: foundList.items});
+      }
+    }
+  });
+
+
+
+});
 
 app.post("/", function(req, res){
 
   //gets user inputted item
   const itemName = req.body.newItem;
+  const listName = req.body.list;
   //push user input into Item model
   const item = new Item({
     name: itemName
-  })
-  //save items to the database
+  });
+
+  if (listName === "Today"){
+    //save items to the database
   item.save();
   //redirect to the home directory and display saved item
   res.redirect("/");
+  } else {
+    List.findOne({name: listName}, function(err, foundList){
+      foundList.items.push(item);
+      foundList.save();
+      res.redirect("/" + listName);
+    });
+  }
 });
 
-app.post("/delete", function(req,res){
-  const checkedItemID = req.body.checkbox;
-  Item.findByIdAndRemove(checkedItemID, function(err){
-    if (!err) {
-      console.log("Successfully deleted checked item");
+app.post("/delete", function(req, res){
+  const checkedItemId = req.body.checkbox;
+
+  Item.findByIdAndRemove(checkedItemId, function(err){
+    if (!err){
+      console.log("Successfully deleted checked item.");
       res.redirect("/");
-    } else {
-      console.log(err);
     }
-  })
-});
+  });
 
-app.get("/work", function(req,res){
-  res.render("list", {listTitle: "Work List", newListItems: workItems});
 });
 
 app.get("/about", function(req, res){
